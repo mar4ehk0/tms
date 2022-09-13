@@ -1,0 +1,103 @@
+version: '3.9'
+
+services:
+  application:
+    build:
+      context: .
+      dockerfile: ./docker/php/Dockerfile
+      target: develop-runtime
+      args:
+        - "DOCKER_USER"
+        - "DOCKER_GROUP_NAME"
+        - "DOCKER_USER_UID"
+        - "DOCKER_USER_GID"
+        - "SRC_PATH"
+    restart: on-failure
+    environment:
+      - "APP_NAME"
+      - "APP_URL=http://${APP_DOMAIN}"
+      - "DB_CONNECTION=${DB_CONNECTION-mysql}"
+      - "SESSION_CONNECTION=${SESSION_CONNECTION-mysql}"
+      - "DB_HOST=postgres"
+      - "DB_PORT=5432"
+      - "DB_DATABASE"
+      - "DB_USERNAME"
+      - "DB_PASSWORD"
+      - "REDIS_HOST=redis"
+      - "REDIS_PASSWORD"
+      - "DOCKER_USER"
+      - "TELESCOPE_ENABLED"
+      - "XDEBUG_MODE=${XDEBUG_MODE-off}"
+      - "XDEBUG_HOST=host.docker.internal"
+      - "PHP_IDE_CONFIG=serverName=Docker"
+      - "DOCKER_USER_UID"
+      - "DOCKER_USER_GID"
+      - "DOCKER_GROUP_NAME"
+      - "SRC_PATH"
+      - "PUBLIC_PATH"
+      - "STORAGE_PATH"
+    volumes:
+      - ./src:${SRC_PATH}:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  nginx:
+    build:
+      context: .
+      dockerfile: ./docker/nginx/Dockerfile
+      target: develop-runtime
+      args:
+        - "APP_DOMAIN"
+        - "DOCKER_USER"
+        - "DOCKER_GROUP_NAME"
+        - "DOCKER_USER_UID"
+        - "DOCKER_USER_GID"
+        - "SRC_PATH"
+        - "PUBLIC_PATH"
+    restart: on-failure
+    environment:
+      - "APP_NAME"
+      - "APP_URL=http://${APP_DOMAIN}"
+      - "TELESCOPE_ENABLED"
+      - "XDEBUG_MODE=${XDEBUG_MODE-off}"
+      - "XDEBUG_HOST=host.docker.internal"
+      - "PHP_IDE_CONFIG=serverName=Docker"
+    ports:
+      - ${FORWARD_HTTP_PORT}:80
+      - ${FORWARD_HTTPS_PORT}:443
+    volumes:
+      - ./src:${SRC_PATH}:rw
+    depends_on:
+      - application
+
+  postgres:
+    image: postgres:13.3
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - ${FORWARD_DB_PORT}:5432
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+
+#  redis:
+#    image: redis:6.2.6-alpine3.15
+#    restart: on-failure
+#    command: --requirepass ${REDIS_PASSWORD}
+#    volumes:
+#      - redis-data:/data:rw
+#    ports:
+#      - ${FORWARD_REDIS_PORT}:6379/tcp
+#    healthcheck:
+#      test: ["CMD-SHELL", "redis-cli ping"]
+#      interval: 2s
+#      timeout: 5s
+
+volumes:
+  redis-data: {}
+  postgres-data: {}
